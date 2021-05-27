@@ -179,7 +179,7 @@ class SnakeGame:
             return self.get_state()
 
     def get_state(self):
-        return self.grid[:self.rows][:self.columns], self.score, self.alive, self.snake[0]
+        return self.grid[:self.rows][:self.columns], self.score, self.alive, self.snake[0], self.food
 
     def get_grid_base(self, width, height):
         menu_start = width * 2/3
@@ -397,7 +397,6 @@ def main():
 
     from IA.deep_Q_learning import DQNAgent
     agent = DQNAgent()  # None for interactive GUI
-
     #
     # Playing with trained AI example
     #
