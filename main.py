@@ -297,7 +297,7 @@ class GUISnakeGame(SnakeGame):
             learning_agent.update(self.get_state())
             if self.food_eaten():
                 self.count = 0
-            if not self.is_alive() or self.count > 100:
+            if self.count > 300 or not self.is_alive():
                 learning_agent.replay_new()
                 self.start_run()
                 self.count = 0

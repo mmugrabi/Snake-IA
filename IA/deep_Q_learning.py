@@ -1,12 +1,10 @@
 import random
 import numpy as np
-import pandas as pd
-from operator import add
+import math
 from collections import deque
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import copy
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 from main import RIGHT, LEFT, DOWN, UP, EMPTY_CHAR
 MOVE = [RIGHT, LEFT, DOWN, UP]
@@ -16,23 +14,22 @@ class DQNAgent(torch.nn.Module):
         super(DQNAgent, self).__init__()
         self.training = True
         self.learning_rate = 0.001 #0.00013629
-        self.epsilon = 0.1
+
         self.gamma = 0.9
         self.optimizer = None
 
+        self.eps_start = 0.9
+        self.eps_end = 0.05
+        self.eps_decay = 200
+        self.target_update_rate = 100
+        self.iteration = 0
+
         self.memory = deque(maxlen=2500)
+        self.batch_size = 128
         self.observation = dict.fromkeys(["state", "action", "reward", "next_state", "done"])
 
+        self.weights_path = "None"
         self.main_network = nn.ModuleList(self.init_network())
-        #self.target_network = self.init_network()
-
-    def set_parameter(self, training=None, epsilon=None, learning_rate=None):
-        if training is not None:
-            self.training = training
-        if epsilon is not None:
-            self.epsilon = epsilon
-        if learning_rate is not None:
-            self.learning_rate = learning_rate
 
     def choose_next_move(self, param):
         state = self.get_state(param)
@@ -49,6 +46,7 @@ class DQNAgent(torch.nn.Module):
         return action
 
     def update(self, param):
+        self.iteration += 1
         if self.training:
             grid, score, alive, head, food, eaten = param
             if not alive:
@@ -64,7 +62,7 @@ class DQNAgent(torch.nn.Module):
             self.train_short_memory()
 
     def epsilon_greedy_exploration_strategy(self, state):
-        if random.random() <= self.epsilon:
+        if random.random() <= self.get_epsilon():
             action = random.choice(MOVE)
         else:
             action = self.best_move(state)
@@ -76,6 +74,8 @@ class DQNAgent(torch.nn.Module):
 
     @staticmethod
     def get_state(state):
+        def is_empty(_x, _y):
+            return 0 <= _y < len(grid) and 0 <= _x < len(grid[0]) and grid[_y][_x] == EMPTY_CHAR
         grid, head, food = state
         y, x = head
         fy, fx = food
@@ -83,33 +83,34 @@ class DQNAgent(torch.nn.Module):
                      fy < y,
                      fx > x,
                      fx < x,
-                     y + 1 < len(grid) and grid[y + 1][x] == EMPTY_CHAR,
-                     y + 1 < len(grid) and x + 1 < len(grid[0]) and grid[y + 1][x + 1] == EMPTY_CHAR,
-                     x + 1 < len(grid[0]) and grid[y][x + 1] == EMPTY_CHAR,
-                     y - 1 >= 0 and x + 1 < len(grid[0]) and grid[y - 1][x + 1] == EMPTY_CHAR,
-                     y - 1 >= 0 and grid[y - 1][x] == EMPTY_CHAR,
-                     y - 1 >= 0 and x - 1 >= 0 and grid[y - 1][x - 1] == EMPTY_CHAR,
-                     x - 1 >= 0 and grid[y][x - 1] == EMPTY_CHAR,
-                     y + 1 < len(grid) and x - 1 >= 0 and grid[y + 1][x - 1] == EMPTY_CHAR]
+                     is_empty(y+1, x  ),
+                     is_empty(y+1, x+1),
+                     is_empty(y  , x+1),
+                     is_empty(y-1, x+1),
+                     is_empty(y-1, x  ),
+                     is_empty(y-1, x-1),
+                     is_empty(y  , x-1),
+                     is_empty(y+1, x-1)]
         state_tensor = torch.tensor(bool_list, dtype=torch.float32).to(DEVICE)
         return state_tensor
 
-    def bellman_equation(self):
-        pass
+    def get_epsilon(self):
+        epsilon = self.eps_end + (self.eps_start - self.eps_end) * math.exp(-1. * self.iteration / self.eps_decay)
+        return epsilon
 
-    def init_network(self, input_layer=12, first_layer=200, second_layer=20, third_layer=50, output_layer=4, weights_path ="None"):
+    def init_network(self, input_layer=12, first_layer=200, second_layer=20, third_layer=50, output_layer=4):
         f1 = nn.Linear(input_layer, first_layer)
         f2 = nn.Linear(first_layer, second_layer)
         f3 = nn.Linear(second_layer, third_layer)
         f4 = nn.Linear(third_layer, output_layer)
         network = [f1, f2, f3, f4]
-        if weights_path != "None":
-            self.model = self.load_state_dict(torch.load(weights_path))
-            print("weights loaded")
+        if self.weights_path != "None":
+            self.load_state_dict(torch.load(self.weights_path))
         return network
 
-    def save_network(self, path):
-        torch.save(self.model.state_dict(), path)
+    def save_network(self):
+        if self.weights_path != "None":
+            torch.save(self.model.state_dict(), self.weights_path)
 
     def forward(self, x):
         f1, f2 , f3, f4 = self.main_network
@@ -123,48 +124,35 @@ class DQNAgent(torch.nn.Module):
         """
         Store the <state, action, reward, next_state, is_done> tuple in a memory buffer for replay memory.
         """
-        self.memory.append((self.observation["state"],
-                            self.observation["action"],
-                            self.observation["reward"],
-                            self.observation["next_state"],
-                            self.observation["done"]))
+        self.memory.append((self.observation.values()))
 
-    def replay_new(self, batch_size=50):
+    def replay_new(self):
         """
         Replay memory.
         """
-        if len(self.memory) > batch_size:
-            minibatch = random.sample(self.memory, batch_size)
+        if len(self.memory) > self.batch_size:
+            minibatch = random.sample(self.memory, self.batch_size)
         else:
             minibatch = self.memory
         for state, action, reward, next_state, done in minibatch:
-            self.train()
-            torch.set_grad_enabled(True)
-            target = reward
-            if not done:
-                target = reward + self.gamma * torch.max(self.forward(next_state)[0])
-            output = self.forward(state)
-            target_f = output.clone()
-            target_f[np.argmax(action)] = target
-            target_f.detach()
-            self.optimizer.zero_grad()
-            loss = F.mse_loss(output, target_f)
-            loss.backward()
-            self.optimizer.step()
+            self.train_agent(state, action, reward, next_state, done)
 
     def train_short_memory(self):
         """
-        Train the DQN agent on the <state, action, reward, next_state, is_done>
-        tuple at the current timestep.
+        Train at the current timestep.
         """
         state, action, reward, next_state, done = self.observation.values()
+        self.train_agent(state, action, reward, next_state, done)
+
+    def train_agent(self, state, action, reward, next_state, done):
+        """
+        Train the DQN agent on the <state, action, reward, next_state, is_done>
+        """
         self.train()
         torch.set_grad_enabled(True)
         target = reward
-        # next_state_tensor = torch.tensor(next_state.reshape((1, 11)), dtype=torch.float32).to(DEVICE)
-        # state_tensor = torch.tensor(state.reshape((1, 11)), dtype=torch.float32, requires_grad=True).to(DEVICE)
         if not done:
-            target = reward + self.gamma * torch.max(self.forward(next_state))
+            target = reward + self.gamma * torch.max(self.forward(next_state)) # bellman equation
         output = self.forward(state)
         target_f = output.clone()
         target_f[np.argmax(action)] = target
@@ -173,3 +161,4 @@ class DQNAgent(torch.nn.Module):
         loss = F.mse_loss(output, target_f)
         loss.backward()
         self.optimizer.step()
+
