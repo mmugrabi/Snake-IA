@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import copy
-DEVICE = 'cpu' # 'cuda' if torch.cuda.is_available() else 'cpu'
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 from main import RIGHT, LEFT, DOWN, UP, EMPTY_CHAR
 MOVE = [RIGHT, LEFT, DOWN, UP]
 
@@ -23,14 +23,8 @@ class DQNAgent(torch.nn.Module):
         self.memory = deque(maxlen=2500)
         self.observation = dict.fromkeys(["state", "action", "reward", "next_state", "done"])
 
-        self.main_network = self.init_network()
+        self.main_network = nn.ModuleList(self.init_network())
         #self.target_network = self.init_network()
-
-        # self.dataframe = pd.DataFrame()
-        # self.short_memory = np.array([])
-        # self.agent_target = 1
-        # self.agent_predict = 0
-        # self.actual = []
 
     def set_parameter(self, training=None, epsilon=None, learning_rate=None):
         if training is not None:
@@ -79,35 +73,6 @@ class DQNAgent(torch.nn.Module):
     def best_move(self, state):
         Q_values = self.forward(state)
         return MOVE[torch.argmax(Q_values)]
-
-    # def train(self):
-    #     mb_size = 50  # Learning minibatch size
-    #     minibatch = random.sample(D, mb_size)  # Sample some moves
-    #
-    #     inputs_shape = (mb_size,) + state.shape[1:]
-    #     inputs = np.zeros(inputs_shape)
-    #     targets = np.zeros((mb_size, env.action_space.n))
-    #
-    #     for i in range(0, mb_size):
-    #         state = minibatch[i][0]
-    #         action = minibatch[i][1]
-    #         reward = minibatch[i][2]
-    #         state_new = minibatch[i][3]
-    #         done = minibatch[i][4]
-    #
-    #         # Build Bellman equation for the Q function
-    #         inputs[i:i + 1] = np.expand_dims(state, axis=0)
-    #         targets[i] = model.predict(state)
-    #         Q_sa = model.predict(state_new)
-    #
-    #         if done:
-    #             targets[i, action] = reward
-    #         else:
-    #             targets[i, action] = reward + gamma * np.max(Q_sa)
-    #
-    #         # Train network to output the Q function
-    #         model.train_on_batch(inputs, targets)
-    #     print('Learning Finished')
 
     @staticmethod
     def get_state(state):
@@ -176,18 +141,16 @@ class DQNAgent(torch.nn.Module):
             self.train()
             torch.set_grad_enabled(True)
             target = reward
-            # next_state_tensor = torch.tensor(np.expand_dims(next_state, 0), dtype=torch.float32).to(DEVICE)
-            # state_tensor = torch.tensor(np.expand_dims(state, 0), dtype=torch.float32, requires_grad=True).to(DEVICE)
             if not done:
                 target = reward + self.gamma * torch.max(self.forward(next_state)[0])
             output = self.forward(state)
             target_f = output.clone()
             target_f[np.argmax(action)] = target
             target_f.detach()
-            #self.optimizer.zero_grad()
+            self.optimizer.zero_grad()
             loss = F.mse_loss(output, target_f)
             loss.backward()
-            #self.optimizer.step()
+            self.optimizer.step()
 
     def train_short_memory(self):
         """
@@ -206,94 +169,7 @@ class DQNAgent(torch.nn.Module):
         target_f = output.clone()
         target_f[np.argmax(action)] = target
         target_f.detach()
-        #self.optimizer.zero_grad()
+        self.optimizer.zero_grad()
         loss = F.mse_loss(output, target_f)
         loss.backward()
-        #self.optimizer.step()
-
-
-# def run():
-#     """
-#     Run the DQN algorithm, based on the parameters previously set.
-#     """
-#     pygame.init()
-#     agent = DQNAgent()
-#     agent = agent.to(DEVICE)
-#     agent.optimizer = optim.Adam(agent.parameters(), weight_decay=0, lr=params['learning_rate'])
-#     counter_games = 0
-#     score_plot = []
-#     counter_plot = []
-#     record = 0
-#     total_score = 0
-#     while counter_games < params['episodes']:
-#         for event in pygame.event.get():
-#             if event.type == pygame.QUIT:
-#                 pygame.quit()
-#                 quit()
-#         # Initialize classes
-#         game = Game(440, 440)
-#         player1 = game.player
-#         food1 = game.food
-#
-#         # Perform first move
-#         initialize_game(player1, game, food1, agent, params['batch_size'])
-#         if params['display']:
-#             display(player1, food1, game, record)
-#
-#         steps = 0  # steps since the last positive reward
-#         while (not game.crash) and (steps < 100):
-#             if not params['train']:
-#                 agent.epsilon = 0.01
-#             else:
-#                 # agent.epsilon is set to give randomness to actions
-#                 agent.epsilon = 1 - (counter_games * params['epsilon_decay_linear'])
-#
-#             # get old state
-#             state_old = agent.get_state(game, player1, food1)
-#
-#             # perform random actions based on agent.epsilon, or choose the action
-#             if random.uniform(0, 1) < agent.epsilon:
-#                 final_move = np.eye(3)[randint(0, 2)]
-#             else:
-#                 # predict action based on the old state
-#                 with torch.no_grad():
-#                     state_old_tensor = torch.tensor(state_old.reshape((1, 11)), dtype=torch.float32).to(DEVICE)
-#                     prediction = agent(state_old_tensor)
-#                     final_move = np.eye(3)[np.argmax(prediction.detach().cpu().numpy()[0])]
-#
-#             # perform new move and get new state
-#             player1.do_move(final_move, player1.x, player1.y, game, food1, agent)
-#             state_new = agent.get_state(game, player1, food1)
-#
-#             # set reward for the new state
-#             reward = agent.set_reward(player1, game.crash)
-#
-#             # if food is eaten, steps is set to 0
-#             if reward > 0:
-#                 steps = 0
-#
-#             if params['train']:
-#                 # train short memory base on the new action and state
-#                 agent.train_short_memory(state_old, final_move, reward, state_new, game.crash)
-#                 # store the new data into a long term memory
-#                 agent.remember(state_old, final_move, reward, state_new, game.crash)
-#
-#             record = get_record(game.score, record)
-#             if params['display']:
-#                 display(player1, food1, game, record)
-#                 pygame.time.wait(params['speed'])
-#             steps += 1
-#         if params['train']:
-#             agent.replay_new(agent.memory, params['batch_size'])
-#         counter_games += 1
-#         total_score += game.score
-#         print(f'Game {counter_games}      Score: {game.score}')
-#         score_plot.append(game.score)
-#         counter_plot.append(counter_games)
-#     mean, stdev = get_mean_stdev(score_plot)
-#     if params['train']:
-#         model_weights = agent.state_dict()
-#         torch.save(model_weights, params["weights_path"])
-#     if params['plot_score']:
-#         plot_seaborn(counter_plot, score_plot, params['train'])
-#     return total_score, mean, stdev
+        self.optimizer.step()
