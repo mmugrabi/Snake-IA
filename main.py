@@ -1,5 +1,6 @@
 #Made with lots of clumsiness and love by Jean Pierre HUYNH.
 import pygame, random, time
+import torch.optim as optim
 
 TITLE = "snAIke!"
 FPS = 30
@@ -33,6 +34,7 @@ class SnakeGame:
         self.start_time = time.time()
         self.current_time = self.start_time
         self.mps = 15
+        self.count = 0
 
     def is_running(self):
         return self.run
@@ -176,10 +178,14 @@ class SnakeGame:
                 self.previous_move = self.next_move
                 self.next_move = None
 
-            return self.get_state()
 
     def get_state(self):
-        return self.grid[:self.rows][:self.columns], self.score, self.alive, self.snake[0], self.food
+        return self.grid[:self.rows][:self.columns], self.score, self.alive, self.snake[0], self.food, self.food_eaten()
+
+    def food_eaten(self):
+        head = self.snake[0]
+        new_pos = (head[0] + self.next_move[0], head[1] + self.next_move[1])
+        return new_pos == self.food
 
     def get_grid_base(self, width, height):
         menu_start = width * 2/3
@@ -286,8 +292,17 @@ class GUISnakeGame(SnakeGame):
                     pos = pygame.mouse.get_pos()
                     self.remove(pos)
 
-        if self.is_alive() and learning_agent is not None:
-            self.set_next_move(learning_agent.choose_next_move(self.get_state()))
+        if learning_agent is not None and len(self.snake)>0:
+            self.set_next_move(learning_agent.choose_next_move([self.grid, self.snake[0], self.food]))
+            learning_agent.update(self.get_state())
+            if self.food_eaten():
+                self.count = 0
+            if not self.is_alive() or self.count > 100:
+                learning_agent.replay_new()
+                self.start_run()
+                self.count = 0
+            self.count += 1
+
 
     def init_pygame(self):
         pygame.init()
@@ -370,8 +385,6 @@ class TrainingSnakeGame(SnakeGame):
             self.set_next_move(self.learning_agent.choose_next_move(self.get_state()))
             return self.move_snake()
 
-        return self.get_state()
-
 def display_state_console20x20(state):
     grid, score, alive, head = state
     print("Alive: " + str(alive) + " -- Current reward: " + str(score))
@@ -384,25 +397,12 @@ def display_state_console20x20(state):
         c += 1
 
 def main():
-    class IAExample:
-        def __init__(self):
-            self.moves = [RIGHT, DOWN, LEFT, UP]
-            self.i = 0
-
-        def choose_next_move(self, state):
-            grid, score, alive, head = state
-            self.i += 1
-            return self.moves[self.i % len(self.moves)]
-
-
     from IA.deep_Q_learning import DQNAgent
-    agent = DQNAgent()  # None for interactive GUI
-    #
-    # Playing with trained AI example
-    #
     game = GUISnakeGame()
+    agent = DQNAgent()  # None for interactive GUI
+    agent.to('cpu')
+    agent.optimizer = optim.Adam(agent.parameters(), weight_decay=0, lr=agent.learning_rate)
 
-    # initializing pygame
     game.init_pygame()
 
     # game loop
@@ -414,10 +414,10 @@ def main():
     #
     # Training AI example
     #
-    game = TrainingSnakeGame(agent)
-    game.start_run()
-    while game.is_alive():
-        game.next_tick()
+    #game = TrainingSnakeGame(agent)
+    #game.start_run()
+    #while game.is_alive():
+    #    game.next_tick()
 
 if __name__ == '__main__':
     main()
