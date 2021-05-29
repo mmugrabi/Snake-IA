@@ -1,6 +1,5 @@
 #Made with lots of clumsiness and love by Jean Pierre HUYNH.
 import pygame, random, time
-import torch.optim as optim
 
 TITLE = "snAIke!"
 FPS = 30
@@ -21,8 +20,8 @@ FOOD_CHAR = '@'
 class SnakeGame:
     def __init__(self):
         self.run = True
-        self.rows = 20
-        self.columns = 20
+        self.rows = 5#20
+        self.columns = 5#20
         self.grid = [[' ' for j in range(100)] for i in range(100)]
         self.snake = []
         self.previous_move = None
@@ -33,7 +32,7 @@ class SnakeGame:
         self.best_score = 0
         self.start_time = time.time()
         self.current_time = self.start_time
-        self.mps = 15
+        self.mps = 5#15
         self.count = 0
 
     def is_running(self):
@@ -229,7 +228,7 @@ class GUISnakeGame(SnakeGame):
 
     def next_tick(self, learning_agent=None):
         self.process_event(learning_agent)
-        if self.is_alive() and (self.frame / FPS >= 1 / self.get_mps() or learning_agent is not None):
+        if self.is_alive() and (self.frame / FPS >= 1 / self.get_mps()): #or learning_agent is not None
             self.move_snake()
             self.frame = 0
         # drawing on screen
@@ -400,14 +399,15 @@ def main():
     from IA.deep_Q_learning import DQNAgent
     game = GUISnakeGame()
     agent = DQNAgent()  # None for interactive GUI
-    agent.to('cpu')
-    agent.optimizer = optim.Adam(agent.parameters(), weight_decay=0, lr=agent.learning_rate)
 
     game.init_pygame()
 
     # game loop
-    while game.is_running():
+    count = 0
+    while game.is_running() and count < 100000:
         game.next_tick(agent)
+        count += 1
+    agent.save_network()
 
     game.cleanup_pygame()
 

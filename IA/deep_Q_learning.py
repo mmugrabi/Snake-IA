@@ -1,3 +1,4 @@
+import os
 import random
 import numpy as np
 import math
@@ -5,35 +6,36 @@ from collections import deque
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.optim as optim
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 from main import RIGHT, LEFT, DOWN, UP, EMPTY_CHAR
 MOVE = [RIGHT, LEFT, DOWN, UP]
 
-class DQNAgent(torch.nn.Module):
+class DQNAgent(nn.Module):
     def __init__(self):
         super(DQNAgent, self).__init__()
-        self.training = True
-        self.learning_rate = 0.001 #0.00013629
+        self.memory = deque(maxlen=2500)
+        self.batch_size = 1000
+        self.observation = dict.fromkeys(["state", "action", "reward", "next_state", "done"])
+        self.learning_rate = 0.00013629
 
-        self.gamma = 0.9
-        self.optimizer = None
+        self.weights_path = "./saves/ia"
+        self.network = None
+        self.init_network()
+        self.to(DEVICE)
+        self.optimizer = optim.Adam(self.parameters(), weight_decay=0, lr=self.learning_rate)
 
+        self.my_training = True
+        self.iteration = 0
         self.eps_start = 0.9
         self.eps_end = 0.05
         self.eps_decay = 200
         self.target_update_rate = 100
-        self.iteration = 0
-
-        self.memory = deque(maxlen=2500)
-        self.batch_size = 128
-        self.observation = dict.fromkeys(["state", "action", "reward", "next_state", "done"])
-
-        self.weights_path = "None"
-        self.main_network = nn.ModuleList(self.init_network())
+        self.gamma = 0.9
 
     def choose_next_move(self, param):
         state = self.get_state(param)
-        if self.training:
+        if self.my_training:
             move = self.observe(state)
         else:
             move = self.best_move(state)
@@ -47,14 +49,14 @@ class DQNAgent(torch.nn.Module):
 
     def update(self, param):
         self.iteration += 1
-        if self.training:
+        if self.my_training:
             grid, score, alive, head, food, eaten = param
             if not alive:
-                reward = -10
+                reward = -20
             elif eaten:
                 reward = 10
             else:
-                reward = 0
+                reward = 1
             self.observation["reward"] = reward
             self.observation["done"] = not alive
             self.observation["next_state"] = self.get_state((grid, head, food))
@@ -70,6 +72,7 @@ class DQNAgent(torch.nn.Module):
 
     def best_move(self, state):
         Q_values = self.forward(state)
+        print("Q_values: ",Q_values.tolist())
         return MOVE[torch.argmax(Q_values)]
 
     @staticmethod
@@ -103,17 +106,17 @@ class DQNAgent(torch.nn.Module):
         f2 = nn.Linear(first_layer, second_layer)
         f3 = nn.Linear(second_layer, third_layer)
         f4 = nn.Linear(third_layer, output_layer)
-        network = [f1, f2, f3, f4]
-        if self.weights_path != "None":
+        self.network = nn.ModuleList([f1, f2, f3, f4])
+        if self.weights_path != "None" and os.path.exists(self.weights_path):
             self.load_state_dict(torch.load(self.weights_path))
-        return network
+            self.eval()
 
     def save_network(self):
         if self.weights_path != "None":
-            torch.save(self.model.state_dict(), self.weights_path)
+            torch.save(self.state_dict(), self.weights_path)
 
     def forward(self, x):
-        f1, f2 , f3, f4 = self.main_network
+        f1, f2, f3, f4 = self.network
         x = F.relu(f1(x))
         x = F.relu(f2(x))
         x = F.relu(f3(x))
