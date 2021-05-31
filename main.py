@@ -414,6 +414,7 @@ def main():
 
     game.init_pygame()
     game.agent = agent
+    game.start_run()
 
     # game loop
     count = 0
