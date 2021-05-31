@@ -252,7 +252,7 @@ class GUISnakeGame(SnakeGame):
             self.move_snake()
             self.frame = 0
         # drawing on screen
-        self.draw()
+        #self.draw()
         self.clock.tick(FPS)
         self.frame += 1
 
