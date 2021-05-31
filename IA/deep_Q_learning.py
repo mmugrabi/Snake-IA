@@ -39,7 +39,7 @@ class Agent:
         grid, score, alive, head, food, eaten, direction, rows, columns = param
         if not alive:
             self.iteration += 1
-            self.draw.plot(score)
+            # self.draw.plot(score)
         self.observation["reward"] = self.get_reward(alive, eaten, food, head, direction)
         self.observation["done"] = not alive
         self.observation["next_state"] = self.get_state((grid, head, food, direction, rows, columns))

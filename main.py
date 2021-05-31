@@ -174,6 +174,7 @@ class SnakeGame:
                     self.spawn_food()
                     if self.score > self.best_score:
                         self.best_score = self.score
+                        print("new best score:",self.best_score)
                 else:
                     tail = self.snake.pop()
                     self.grid[tail[0]][tail[1]] = EMPTY_CHAR
