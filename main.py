@@ -20,11 +20,11 @@ FOOD_CHAR = '@'
 class SnakeGame:
     def __init__(self):
         self.run = True
-        self.rows = 5#20
-        self.columns = 5#20
+        self.rows = 30
+        self.columns = 30
         self.grid = [[' ' for j in range(100)] for i in range(100)]
         self.snake = []
-        self.previous_move = None
+        self.previous_move = DOWN
         self.next_move = None
         self.food = None
         self.alive = False
@@ -32,8 +32,9 @@ class SnakeGame:
         self.best_score = 0
         self.start_time = time.time()
         self.current_time = self.start_time
-        self.mps = 5#15
+        self.mps = 100
         self.count = 0
+        self.agent = None
 
     def is_running(self):
         return self.run
@@ -137,7 +138,7 @@ class SnakeGame:
         self.remove_snake()
         self.alive = True
         self.score = 0
-        self.previous_move = None
+        # self.previous_move = None
         self.next_move = None
         self.spawn_snake()
         self.spawn_food()
@@ -163,23 +164,41 @@ class SnakeGame:
             new_pos = (head[0] + self.next_move[0], head[1] + self.next_move[1])
             if self.is_collision(new_pos):
                 self.alive = False
-                if self.score > self.best_score:
-                    self.best_score = self.score
+                if self.agent is not None:
+                    self.update_agent()
             else:
                 self.snake.insert(0, new_pos)
                 self.grid[new_pos[0]][new_pos[1]] = SNAKE_CHAR
                 if new_pos == self.food:
                     self.score += 1
                     self.spawn_food()
+                    if self.score > self.best_score:
+                        self.best_score = self.score
                 else:
                     tail = self.snake.pop()
                     self.grid[tail[0]][tail[1]] = EMPTY_CHAR
                 self.previous_move = self.next_move
-                self.next_move = None
+                if self.agent is not None:
+                    self.update_agent()
+        self.next_move = None
+
+
+    def update_agent(self):
+        if self.food_eaten():
+            self.count = 0
+        if not self.is_alive() or self.count > self.rows * self.columns:
+            self.alive = False
+            self.agent.update(self.get_state())
+            self.agent.train_long_memory()
+            self.count = 0
+            self.start_run()
+        else:
+            self.agent.update(self.get_state())
+        self.count += 1
 
 
     def get_state(self):
-        return self.grid[:self.rows][:self.columns], self.score, self.alive, self.snake[0], self.food, self.food_eaten()
+        return self.grid[:self.rows][:self.columns], self.score, self.alive, self.snake[0], self.food, self.food_eaten(), self.previous_move, self.rows, self.columns
 
     def food_eaten(self):
         head = self.snake[0]
@@ -226,8 +245,8 @@ class GUISnakeGame(SnakeGame):
         super(GUISnakeGame, self).__init__()
         self.frame = 0
 
-    def next_tick(self, learning_agent=None):
-        self.process_event(learning_agent)
+    def next_tick(self):
+        self.process_event(self.agent)
         if self.is_alive() and (self.frame / FPS >= 1 / self.get_mps()): #or learning_agent is not None
             self.move_snake()
             self.frame = 0
@@ -291,16 +310,8 @@ class GUISnakeGame(SnakeGame):
                     pos = pygame.mouse.get_pos()
                     self.remove(pos)
 
-        if learning_agent is not None and len(self.snake)>0:
-            self.set_next_move(learning_agent.choose_next_move([self.grid, self.snake[0], self.food]))
-            learning_agent.update(self.get_state())
-            if self.food_eaten():
-                self.count = 0
-            if self.count > 300 or not self.is_alive():
-                learning_agent.replay_new()
-                self.start_run()
-                self.count = 0
-            self.count += 1
+        if learning_agent is not None and len(self.snake)>0 and self.next_move is None:
+            self.set_next_move(learning_agent.choose_next_move([self.grid, self.snake[0], self.food, self.previous_move, self.rows, self.columns]))
 
 
     def init_pygame(self):
@@ -396,18 +407,19 @@ def display_state_console20x20(state):
         c += 1
 
 def main():
-    from IA.deep_Q_learning import DQNAgent
+    from IA.deep_Q_learning import Agent
     game = GUISnakeGame()
-    agent = DQNAgent()  # None for interactive GUI
+    agent = Agent()  # None for interactive GUI
 
     game.init_pygame()
+    game.agent = agent
 
     # game loop
     count = 0
-    while game.is_running() and count < 100000:
-        game.next_tick(agent)
+    while game.is_running() :#and count < 100000:
+        game.next_tick()
         count += 1
-    agent.save_network()
+    agent.save()
 
     game.cleanup_pygame()
 

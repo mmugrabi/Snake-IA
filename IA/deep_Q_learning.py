@@ -1,167 +1,160 @@
-import os
+import torch
 import random
 import numpy as np
-import math
 from collections import deque
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-from main import RIGHT, LEFT, DOWN, UP, EMPTY_CHAR
-MOVE = [RIGHT, LEFT, DOWN, UP]
+from IA.model import Linear_QNet, QTrainer
+from math import exp
+from IA.draw import Draw
+from main import RIGHT, LEFT, DOWN, UP, EMPTY_CHAR, FOOD_CHAR
 
-class DQNAgent(nn.Module):
+MAX_MEMORY = 100_000
+BATCH_SIZE = 2500
+LR = 0.00025
+
+FILE_NAME = "3_layers"
+
+class Agent:
     def __init__(self):
-        super(DQNAgent, self).__init__()
-        self.memory = deque(maxlen=2500)
-        self.batch_size = 1000
-        self.observation = dict.fromkeys(["state", "action", "reward", "next_state", "done"])
-        self.learning_rate = 0.00013629
+        self.gamma = 0.95  # discount rate
+        self.memory = deque(maxlen=MAX_MEMORY)                                  # 11, 256, 3
+        self.model = Linear_QNet([11, 128, 128, 128, 3], "./saves/"+FILE_NAME)  # 11, 200, 20, 50, 3
+        self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)            # 11, 128, 128, 128, 3
 
-        self.weights_path = "./saves/ia"
-        self.network = None
-        self.init_network()
-        self.to(DEVICE)
-        self.optimizer = optim.Adam(self.parameters(), weight_decay=0, lr=self.learning_rate)
-
-        self.my_training = True
         self.iteration = 0
-        self.eps_start = 0.9
-        self.eps_end = 0.05
-        self.eps_decay = 200
-        self.target_update_rate = 100
-        self.gamma = 0.9
+        self.eps_start = 0.01
+        self.eps_end = 0.01
+        self.eps_decay = 0.995
+
+        self.observation = dict.fromkeys(["state", "action", "reward", "next_state", "done"])
+        self.draw = Draw()
 
     def choose_next_move(self, param):
-        state = self.get_state(param)
-        if self.my_training:
-            move = self.observe(state)
-        else:
-            move = self.best_move(state)
-        return move
-
-    def observe(self, state):
-        action = self.epsilon_greedy_exploration_strategy(state)
+        grid, head, food, direction, rows, columns = param
+        state = self.get_state((grid, head, food, direction, rows, columns))
+        action = self.epsilon_greedy_exploration_strategy(state, direction)
         self.observation["state"] = state
-        self.observation["action"] = action
         return action
 
     def update(self, param):
-        self.iteration += 1
-        if self.my_training:
-            grid, score, alive, head, food, eaten = param
-            if not alive:
-                reward = -20
-            elif eaten:
-                reward = 10
-            else:
-                reward = 1
-            self.observation["reward"] = reward
-            self.observation["done"] = not alive
-            self.observation["next_state"] = self.get_state((grid, head, food))
-            self.remember()
-            self.train_short_memory()
-
-    def epsilon_greedy_exploration_strategy(self, state):
-        if random.random() <= self.get_epsilon():
-            action = random.choice(MOVE)
-        else:
-            action = self.best_move(state)
-        return action
-
-    def best_move(self, state):
-        Q_values = self.forward(state)
-        print("Q_values: ",Q_values.tolist())
-        return MOVE[torch.argmax(Q_values)]
+        grid, score, alive, head, food, eaten, direction, rows, columns = param
+        if not alive:
+            self.iteration += 1
+            self.draw.plot(score)
+        self.observation["reward"] = self.get_reward(alive, eaten, food, head, direction)
+        self.observation["done"] = not alive
+        self.observation["next_state"] = self.get_state((grid, head, food, direction, rows, columns))
+        self.remember()
+        self.train_short_memory()
 
     @staticmethod
-    def get_state(state):
-        def is_empty(_x, _y):
-            return 0 <= _y < len(grid) and 0 <= _x < len(grid[0]) and grid[_y][_x] == EMPTY_CHAR
-        grid, head, food = state
+    def get_reward(alive, eaten, food, head, direction):
+        reward = 0
         y, x = head
         fy, fx = food
-        bool_list = [fy > y,
-                     fy < y,
-                     fx > x,
-                     fx < x,
-                     is_empty(y+1, x  ),
-                     is_empty(y+1, x+1),
-                     is_empty(y  , x+1),
-                     is_empty(y-1, x+1),
-                     is_empty(y-1, x  ),
-                     is_empty(y-1, x-1),
-                     is_empty(y  , x-1),
-                     is_empty(y+1, x-1)]
-        state_tensor = torch.tensor(bool_list, dtype=torch.float32).to(DEVICE)
-        return state_tensor
+        if not alive:
+            reward += -100
+        elif eaten:
+            reward += 10
+        if fx < x: # food left
+            if direction == LEFT:
+                reward += 1
+            elif direction == RIGHT:
+                reward += -1
+        if fx > x: # food right
+            if direction == RIGHT:
+                reward += 1
+            elif direction == LEFT:
+                reward += -1
+        if fy < y: # food up
+            if direction == UP:
+                reward += 1
+            elif direction == DOWN:
+                reward += -1
+        if fy > y: # food down
+            if direction == DOWN:
+                reward += 1
+            elif direction == UP:
+                reward += -1
+        return reward
+
+    def epsilon_greedy_exploration_strategy(self, state, direction):
+        if random.random() <= self.get_epsilon():
+            random_action = random.randint(0,2)
+            action = self.direction_converter(random_action, direction)
+            tmp = [0, 0, 0]
+            tmp[random_action] = 1
+            self.observation["action"] = tmp
+        else:
+            action = self.best_move(state, direction)
+        return action
+
+    def best_move(self, state, direction):
+        state0 = torch.tensor(state, dtype=torch.float)
+        prediction = self.model(state0)
+        action = torch.argmax(prediction).item()
+        tmp = [0, 0, 0]
+        tmp[action] = 1
+        self.observation["action"] = tmp
+        move = self.direction_converter(action, direction)
+        return move
+
+    @staticmethod
+    def direction_converter(action, direction):
+        if direction == UP:
+            move = [UP, LEFT, RIGHT][action]
+        elif direction == RIGHT:
+            move = [RIGHT, UP, DOWN][action]
+        elif direction == DOWN:
+            move = [DOWN, RIGHT, LEFT][action]
+        else:
+            move = [LEFT, DOWN, UP][action]
+        return move
+
+    def get_state(self, state):
+        def danger(_y, _x):
+            return not(0 <= _y < rows and 0 <= _x < columns and (grid[_y][_x] in (EMPTY_CHAR,FOOD_CHAR)))
+        grid, head, food, direction, rows, columns = state
+        y, x = head
+        fy, fx = food
+        bool_list = [
+            # Danger straight
+            danger(*np.add((y, x), direction)),
+            # Danger right
+            danger(*np.add((y, x), self.direction_converter(2, direction))),
+            # Danger left
+            danger(*np.add((y, x), self.direction_converter(1, direction))),
+            # Move direction
+            direction == LEFT,
+            direction == RIGHT,
+            direction == UP,
+            direction == DOWN,
+            # Food location
+            fx < x, # food left
+            fx > x, # food right
+            fy < y, # food up
+            fy > y] # food down
+        return np.asarray(bool_list, dtype=bool)
 
     def get_epsilon(self):
-        epsilon = self.eps_end + (self.eps_start - self.eps_end) * math.exp(-1. * self.iteration / self.eps_decay)
+        epsilon = self.eps_end + (self.eps_start - self.eps_end) * exp(-1. * self.iteration / self.eps_decay)
         return epsilon
 
-    def init_network(self, input_layer=12, first_layer=200, second_layer=20, third_layer=50, output_layer=4):
-        f1 = nn.Linear(input_layer, first_layer)
-        f2 = nn.Linear(first_layer, second_layer)
-        f3 = nn.Linear(second_layer, third_layer)
-        f4 = nn.Linear(third_layer, output_layer)
-        self.network = nn.ModuleList([f1, f2, f3, f4])
-        if self.weights_path != "None" and os.path.exists(self.weights_path):
-            self.load_state_dict(torch.load(self.weights_path))
-            self.eval()
-
-    def save_network(self):
-        if self.weights_path != "None":
-            torch.save(self.state_dict(), self.weights_path)
-
-    def forward(self, x):
-        f1, f2, f3, f4 = self.network
-        x = F.relu(f1(x))
-        x = F.relu(f2(x))
-        x = F.relu(f3(x))
-        x = F.softmax(f4(x), dim=-1)
-        return x
-
     def remember(self):
-        """
-        Store the <state, action, reward, next_state, is_done> tuple in a memory buffer for replay memory.
-        """
         self.memory.append((self.observation.values()))
 
-    def replay_new(self):
-        """
-        Replay memory.
-        """
-        if len(self.memory) > self.batch_size:
-            minibatch = random.sample(self.memory, self.batch_size)
+    def train_long_memory(self):
+        if len(self.memory) > BATCH_SIZE:
+            mini_sample = random.sample(self.memory, BATCH_SIZE)  # list of tuples
         else:
-            minibatch = self.memory
-        for state, action, reward, next_state, done in minibatch:
-            self.train_agent(state, action, reward, next_state, done)
+            mini_sample = self.memory
+
+        states, actions, rewards, next_states, dones = zip(*mini_sample)
+        self.trainer.train_step(states, actions, rewards, next_states, dones)
+        # for state, action, reward, next_state, done in mini_sample:
+        #    self.trainer.train_step(state, action, reward, next_state, done)
 
     def train_short_memory(self):
-        """
-        Train at the current timestep.
-        """
-        state, action, reward, next_state, done = self.observation.values()
-        self.train_agent(state, action, reward, next_state, done)
+        self.trainer.train_step(*self.observation.values())
 
-    def train_agent(self, state, action, reward, next_state, done):
-        """
-        Train the DQN agent on the <state, action, reward, next_state, is_done>
-        """
-        self.train()
-        torch.set_grad_enabled(True)
-        target = reward
-        if not done:
-            target = reward + self.gamma * torch.max(self.forward(next_state)) # bellman equation
-        output = self.forward(state)
-        target_f = output.clone()
-        target_f[np.argmax(action)] = target
-        target_f.detach()
-        self.optimizer.zero_grad()
-        loss = F.mse_loss(output, target_f)
-        loss.backward()
-        self.optimizer.step()
-
+    def save(self, file_name=FILE_NAME):
+        self.model.save(file_name)
