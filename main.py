@@ -20,8 +20,13 @@ FOOD_CHAR = '@'
 class SnakeGame:
     def __init__(self):
         self.run = True
+<<<<<<< HEAD
         self.rows = 6
         self.columns = 6
+=======
+        self.rows = 10
+        self.columns = 10
+>>>>>>> 2cbb235c4a00989db8e9ea55617128d75971948d
         self.grid = [[' ' for j in range(100)] for i in range(100)]
         self.snake = []
         self.previous_move = DOWN

@@ -4,23 +4,54 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-class Linear_QNet(nn.Module):
+class CNNModel(nn.Module):
     def __init__(self, layers = [11, 200, 3], weights_path="None"):
-        super().__init__()
-        self.path = weights_path
-        self.network = nn.ModuleList()
-        for i in range(len(layers)-1):
-            self.network.append(nn.Linear(layers[i], layers[i+1]))
-        if weights_path != "None" and os.path.exists(weights_path):
-            self.load_state_dict(torch.load(weights_path))
-            self.eval()
+        super(CNNModel, self).__init__()
+        # Convolution 1
+        self.cnn1 = nn.Conv2d( in_channels=10, out_channels=10, kernel_size=5, stride=1, padding=2)
+        self.relu1 = nn.ReLU()
+        # Max pool 1
+        self.maxpool1 = nn.MaxPool2d(kernel_size=2)
+        # Convolution 2
+        self.cnn2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=5, stride=1, padding=2)
+        self.relu2 = nn.ReLU()
+        # Max pool 2
+        self.maxpool2 = nn.MaxPool2d(kernel_size=2)
+        # Fully connected 1 (readout)
+        self.fc1 = nn.Linear(32 * 7 * 7, 10)
+
+        # super().__init__()
+        # self.path = weights_path
+        # self.network = nn.ModuleList()
+        # for i in range(len(layers)-1):
+        #     self.network.append(nn.Linear(layers[i], layers[i+1]))
+        # if weights_path != "None" and os.path.exists(weights_path):
+        #     self.load_state_dict(torch.load(weights_path))
+        #     self.eval()
 
     def forward(self, x):
-        for layer in self.network[:-1]:
-            x = F.relu(layer(x))
-        x = F.softmax(self.network[-1](x), dim=-1)
-        # x = self.network[-1](x)
-        return x
+        # Convolution 1
+        out = self.cnn1(x)
+        out = self.relu1(out)
+        # Max pool 1
+        out = self.maxpool1(out)
+        # Convolution 2
+        out = self.cnn2(out)
+        out = self.relu2(out)
+        # Max pool 2
+        out = self.maxpool2(out)
+        # Resize
+        # Original size: (100, 32, 7, 7)
+        # out.size(0): 100
+        # New out size: (100, 32*7*7)
+        out = out.view(out.size(0), -1)
+        # Linear function (readout)
+        out = self.fc1(out)
+        return out
+        # for layer in self.network[:-1]:
+        #     x = F.relu(layer(x))
+        # x = F.softmax(self.network[-1](x), dim=-1)
+        # return x
 
     def save(self, file_name='model.pth'):
         model_folder_path = './saves'
