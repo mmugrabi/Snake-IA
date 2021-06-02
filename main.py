@@ -20,8 +20,8 @@ FOOD_CHAR = '@'
 class SnakeGame:
     def __init__(self):
         self.run = True
-        self.rows = 30
-        self.columns = 30
+        self.rows = 20
+        self.columns = 20
         self.grid = [[' ' for j in range(100)] for i in range(100)]
         self.snake = []
         self.previous_move = DOWN
@@ -252,7 +252,7 @@ class GUISnakeGame(SnakeGame):
             self.move_snake()
             self.frame = 0
         # drawing on screen
-        #self.draw()
+        self.draw()
         self.clock.tick(FPS)
         self.frame += 1
 
@@ -414,7 +414,7 @@ def main():
 
     game.init_pygame()
     game.agent = agent
-    game.start_run()
+    # game.start_run()
 
     # game loop
     count = 0

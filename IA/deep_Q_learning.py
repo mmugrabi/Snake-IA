@@ -5,13 +5,13 @@ from collections import deque
 from IA.model import Linear_QNet, QTrainer
 from math import exp
 from IA.draw import Draw
-from main import RIGHT, LEFT, DOWN, UP, EMPTY_CHAR, FOOD_CHAR
+from main import RIGHT, LEFT, DOWN, UP, SNAKE_CHAR, EMPTY_CHAR, WALL_CHAR, FOOD_CHAR
 
 MAX_MEMORY = 100_000
 BATCH_SIZE = 2500
 LR = 0.00025
 
-FILE_NAME = "3_layers"
+FILE_NAME = "test_layers"
 
 class Agent:
     def __init__(self):
@@ -21,7 +21,7 @@ class Agent:
         self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)            # 11, 128, 128, 128, 3
 
         self.iteration = 0
-        self.eps_start = 0.01
+        self.eps_start = 1
         self.eps_end = 0.01
         self.eps_decay = 0.995
 
@@ -39,7 +39,7 @@ class Agent:
         grid, score, alive, head, food, eaten, direction, rows, columns = param
         if not alive:
             self.iteration += 1
-            # self.draw.plot(score)
+            self.draw.plot(score)
         self.observation["reward"] = self.get_reward(alive, eaten, food, head, direction)
         self.observation["done"] = not alive
         self.observation["next_state"] = self.get_state((grid, head, food, direction, rows, columns))
@@ -111,18 +111,23 @@ class Agent:
         return move
 
     def get_state(self, state):
-        def danger(_y, _x):
-            return not(0 <= _y < rows and 0 <= _x < columns and (grid[_y][_x] in (EMPTY_CHAR,FOOD_CHAR)))
+        def distance_from_danger(pos, direc):
+            distance = 0
+            while 0 <= pos[0] < rows and 0 <= pos[1] < columns and (grid[pos[0]][pos[1]] not in [WALL_CHAR, SNAKE_CHAR]):
+                pos = np.add(pos, direc)
+                distance += 1
+            return distance
+
         grid, head, food, direction, rows, columns = state
         y, x = head
         fy, fx = food
-        bool_list = [
+        state_list = [
             # Danger straight
-            danger(*np.add((y, x), direction)),
+            distance_from_danger((y, x), direction),
             # Danger right
-            danger(*np.add((y, x), self.direction_converter(2, direction))),
+            distance_from_danger((y, x), self.direction_converter(2, direction)),
             # Danger left
-            danger(*np.add((y, x), self.direction_converter(1, direction))),
+            distance_from_danger((y, x), self.direction_converter(1, direction)),
             # Move direction
             direction == LEFT,
             direction == RIGHT,
@@ -133,7 +138,7 @@ class Agent:
             fx > x, # food right
             fy < y, # food up
             fy > y] # food down
-        return np.asarray(bool_list, dtype=bool)
+        return np.asarray(state_list, dtype=bool)
 
     def get_epsilon(self):
         epsilon = self.eps_end + (self.eps_start - self.eps_end) * exp(-1. * self.iteration / self.eps_decay)
