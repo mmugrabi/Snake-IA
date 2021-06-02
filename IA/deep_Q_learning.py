@@ -5,25 +5,25 @@ from collections import deque
 from IA.model import Linear_QNet, QTrainer
 from math import exp
 from IA.draw import Draw
-from main import RIGHT, LEFT, DOWN, UP, EMPTY_CHAR, FOOD_CHAR
+from main import RIGHT, LEFT, DOWN, UP, SNAKE_CHAR, EMPTY_CHAR, WALL_CHAR, FOOD_CHAR
 
 MAX_MEMORY = 100_000
 BATCH_SIZE = 2500
 LR = 0.00025
 
-FILE_NAME = "3_layers"
+FILE_NAME = "full_grid"
 
 class Agent:
     def __init__(self):
         self.gamma = 0.95  # discount rate
         self.memory = deque(maxlen=MAX_MEMORY)                                  # 11, 256, 3
-        self.model = Linear_QNet([11, 128, 128, 128, 3], "./saves/"+FILE_NAME)  # 11, 200, 20, 50, 3
+        self.model = Linear_QNet([100, 128, 128, 128, 3], "./saves/"+FILE_NAME)  # 11, 200, 20, 50, 3
         self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)            # 11, 128, 128, 128, 3
 
         self.iteration = 0
-        self.eps_start = 0.01
+        self.eps_start = 1
         self.eps_end = 0.01
-        self.eps_decay = 0.995
+        self.eps_decay = 40#0.995
 
         self.observation = dict.fromkeys(["state", "action", "reward", "next_state", "done"])
         self.draw = Draw()
@@ -110,30 +110,23 @@ class Agent:
             move = [LEFT, DOWN, UP][action]
         return move
 
-    def get_state(self, state):
-        def danger(_y, _x):
-            return not(0 <= _y < rows and 0 <= _x < columns and (grid[_y][_x] in (EMPTY_CHAR,FOOD_CHAR)))
+    @staticmethod
+    def get_state(state):
         grid, head, food, direction, rows, columns = state
-        y, x = head
-        fy, fx = food
-        bool_list = [
-            # Danger straight
-            danger(*np.add((y, x), direction)),
-            # Danger right
-            danger(*np.add((y, x), self.direction_converter(2, direction))),
-            # Danger left
-            danger(*np.add((y, x), self.direction_converter(1, direction))),
-            # Move direction
-            direction == LEFT,
-            direction == RIGHT,
-            direction == UP,
-            direction == DOWN,
-            # Food location
-            fx < x, # food left
-            fx > x, # food right
-            fy < y, # food up
-            fy > y] # food down
-        return np.asarray(bool_list, dtype=bool)
+        state_list = np.array([], dtype=int)
+        for i in range(rows):
+            for j in range(columns):
+                char = ord(grid[i][j])
+                if (i, j) == head:
+                    state_list = np.append(state_list, 2)
+                elif char in [SNAKE_CHAR, WALL_CHAR]:
+                    state_list = np.append(state_list, 3)
+                elif char is FOOD_CHAR:
+                    state_list = np.append(state_list, 1)
+                else:
+                    state_list = np.append(state_list, 0)
+        state_list = state_list / np.linalg.norm(state_list)
+        return state_list
 
     def get_epsilon(self):
         epsilon = self.eps_end + (self.eps_start - self.eps_end) * exp(-1. * self.iteration / self.eps_decay)
@@ -144,14 +137,11 @@ class Agent:
 
     def train_long_memory(self):
         if len(self.memory) > BATCH_SIZE:
-            mini_sample = random.sample(self.memory, BATCH_SIZE)  # list of tuples
+            mini_sample = random.sample(self.memory, BATCH_SIZE)
         else:
             mini_sample = self.memory
-
         states, actions, rewards, next_states, dones = zip(*mini_sample)
         self.trainer.train_step(states, actions, rewards, next_states, dones)
-        # for state, action, reward, next_state, done in mini_sample:
-        #    self.trainer.train_step(state, action, reward, next_state, done)
 
     def train_short_memory(self):
         self.trainer.train_step(*self.observation.values())
