@@ -2,7 +2,7 @@ import torch
 import random
 import numpy as np
 from collections import deque
-from IA.model import Linear_QNet, QTrainer
+from IA.model import CNNModel, QTrainer
 from math import exp
 from IA.draw import Draw
 from main import RIGHT, LEFT, DOWN, UP, SNAKE_CHAR, EMPTY_CHAR, WALL_CHAR, FOOD_CHAR
@@ -17,7 +17,7 @@ class Agent:
     def __init__(self):
         self.gamma = 0.95  # discount rate
         self.memory = deque(maxlen=MAX_MEMORY)                                  # 11, 256, 3
-        self.model = Linear_QNet([100, 128, 128, 128, 3], "./saves/"+FILE_NAME)  # 11, 200, 20, 50, 3
+        self.model = CNNModel([100, 128, 128, 128, 3], "./saves/"+FILE_NAME)  # 11, 200, 20, 50, 3
         self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)            # 11, 128, 128, 128, 3
 
         self.iteration = 0
@@ -113,18 +113,20 @@ class Agent:
     @staticmethod
     def get_state(state):
         grid, head, food, direction, rows, columns = state
-        state_list = np.array([], dtype=float)
+        state_list = []
         for i in range(rows):
+            state_list.append([])
             for j in range(columns):
                 char = ord(grid[i][j])
                 if (i, j) == head:
-                    state_list = np.append(state_list, 2)
+                    state_list[-1].append(2)
                 elif char in [SNAKE_CHAR, WALL_CHAR]:
-                    state_list = np.append(state_list, 3)
+                    state_list[-1].append(3)
                 elif char is FOOD_CHAR:
-                    state_list = np.append(state_list, 1)
+                    state_list[-1].append(1)
                 else:
-                    state_list = np.append(state_list, 0)
+                    state_list[-1].append(0)
+        state_list = np.asarray(state_list)
         state_list = state_list / np.linalg.norm(state_list)
         return state_list
 
