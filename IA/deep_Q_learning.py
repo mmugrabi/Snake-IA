@@ -21,8 +21,8 @@ class Agent:
         self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)            # 11, 128, 128, 128, 3
 
         self.iteration = 0
-        self.eps_start = 0.01
-        self.eps_end = 0.01
+        self.eps_start = 1
+        self.eps_end = 0
         self.eps_decay = 0.995
 
         self.observation = dict.fromkeys(["state", "action", "reward", "next_state", "done"])
@@ -147,11 +147,8 @@ class Agent:
             mini_sample = random.sample(self.memory, BATCH_SIZE)  # list of tuples
         else:
             mini_sample = self.memory
-
         states, actions, rewards, next_states, dones = zip(*mini_sample)
         self.trainer.train_step(states, actions, rewards, next_states, dones)
-        # for state, action, reward, next_state, done in mini_sample:
-        #    self.trainer.train_step(state, action, reward, next_state, done)
 
     def train_short_memory(self):
         self.trainer.train_step(*self.observation.values())
