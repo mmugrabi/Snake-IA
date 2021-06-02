@@ -11,7 +11,7 @@ MAX_MEMORY = 100_000
 BATCH_SIZE = 2500
 LR = 0.00025
 
-FILE_NAME = "test_layers"
+FILE_NAME = "distance"
 
 class Agent:
     def __init__(self):
@@ -112,7 +112,7 @@ class Agent:
 
     def get_state(self, state):
         def distance_from_danger(pos, direc):
-            distance = 1
+            distance = 0
             pos = np.add(pos, direc)
             while 0 <= pos[0] < rows and 0 <= pos[1] < columns and (grid[pos[0]][pos[1]] not in [WALL_CHAR, SNAKE_CHAR]):
                 pos = np.add(pos, direc)
@@ -124,11 +124,11 @@ class Agent:
         fy, fx = food
         state_list = [
             # Danger straight
-            distance_from_danger((y, x), direction),
+            distance_from_danger((y, x), direction) / rows,
             # Danger right
-            distance_from_danger((y, x), self.direction_converter(2, direction)),
+            distance_from_danger((y, x), self.direction_converter(2, direction)) / rows,
             # Danger left
-            distance_from_danger((y, x), self.direction_converter(1, direction)),
+            distance_from_danger((y, x), self.direction_converter(1, direction)) / rows,
             # Move direction
             direction == LEFT,
             direction == RIGHT,
@@ -139,7 +139,7 @@ class Agent:
             fx > x, # food right
             fy < y, # food up
             fy > y] # food down
-        return np.asarray(state_list, dtype=bool)
+        return np.asarray(state_list, dtype=float)
 
     def get_epsilon(self):
         epsilon = self.eps_end + (self.eps_start - self.eps_end) * exp(-1. * self.iteration / self.eps_decay)
