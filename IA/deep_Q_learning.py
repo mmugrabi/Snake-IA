@@ -113,7 +113,7 @@ class Agent:
     @staticmethod
     def get_state(state):
         grid, head, food, direction, rows, columns = state
-        state_list = np.array([], dtype=int)
+        state_list = np.array([], dtype=float)
         for i in range(rows):
             for j in range(columns):
                 char = ord(grid[i][j])
