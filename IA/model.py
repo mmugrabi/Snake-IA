@@ -19,7 +19,6 @@ class Linear_QNet(nn.Module):
         for layer in self.network[:-1]:
             x = F.relu(layer(x))
         x = F.softmax(self.network[-1](x), dim=-1)
-        # x = self.network[-1](x)
         return x
 
     def save(self, file_name='model.pth'):
@@ -52,7 +51,6 @@ class QTrainer:
             next_state = torch.unsqueeze(next_state, 0)
             action = torch.unsqueeze(action, 0)
             reward = torch.unsqueeze(reward, 0)
-            # print("Reward:", reward, "Action:", action)
             done = (done,)
 
         # 1: predicted Q values with current state
