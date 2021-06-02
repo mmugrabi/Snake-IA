@@ -11,7 +11,7 @@ MAX_MEMORY = 100_000
 BATCH_SIZE = 2500
 LR = 0.00025
 
-FILE_NAME = "distance"
+FILE_NAME = "distance_3_layers_4x4"
 
 class Agent:
     def __init__(self):
