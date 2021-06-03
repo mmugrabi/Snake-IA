@@ -16,9 +16,9 @@ FILE_NAME = "3_layers"
 class Agent:
     def __init__(self):
         self.gamma = 0.95  # discount rate
-        self.memory = deque(maxlen=MAX_MEMORY)                                  # 11, 256, 3
-        self.model = Linear_QNet([11, 128, 128, 128, 3], "./saves/"+FILE_NAME)  # 11, 200, 20, 50, 3
-        self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)            # 11, 128, 128, 128, 3
+        self.memory = deque(maxlen=MAX_MEMORY)
+        self.model = Linear_QNet([11, 128, 128, 128, 3], "./saves/"+FILE_NAME)
+        self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)
 
         self.iteration = 0
         self.eps_start = 1
@@ -29,6 +29,9 @@ class Agent:
         self.draw = Draw()
 
     def choose_next_move(self, param):
+        """"
+        methode call automatically by the game to select the next action of the agent
+        """
         grid, head, food, direction, rows, columns = param
         state = self.get_state((grid, head, food, direction, rows, columns))
         action = self.epsilon_greedy_exploration_strategy(state, direction)
@@ -36,6 +39,9 @@ class Agent:
         return action
 
     def update(self, param):
+        """
+        methode call by the game after a movement
+        """
         grid, score, alive, head, food, eaten, direction, rows, columns = param
         if not alive:
             self.iteration += 1
@@ -48,6 +54,9 @@ class Agent:
 
     @staticmethod
     def get_reward(alive, eaten, food, head, direction):
+        """
+        compute the agent reward for its last action
+        """
         reward = 0
         y, x = head
         fy, fx = food
@@ -78,6 +87,9 @@ class Agent:
         return reward
 
     def epsilon_greedy_exploration_strategy(self, state, direction):
+        """
+        return a random action with a probability epsilon otherwise choose best know action
+        """
         if random.random() <= self.get_epsilon():
             random_action = random.randint(0,2)
             action = self.direction_converter(random_action, direction)
@@ -89,6 +101,9 @@ class Agent:
         return action
 
     def best_move(self, state, direction):
+        """
+        return the best action from the state of the agent
+        """
         state0 = torch.tensor(state, dtype=torch.float)
         prediction = self.model(state0)
         action = torch.argmax(prediction).item()
@@ -100,6 +115,9 @@ class Agent:
 
     @staticmethod
     def direction_converter(action, direction):
+        """
+        convert an action from the snake to a cardinal point
+        """
         if direction == UP:
             move = [UP, LEFT, RIGHT][action]
         elif direction == RIGHT:
@@ -111,6 +129,9 @@ class Agent:
         return move
 
     def get_state(self, state):
+        """
+        obtain the state for the agent from the game
+        """
         def danger(_y, _x):
             return not(0 <= _y < rows and 0 <= _x < columns and (grid[_y][_x] in (EMPTY_CHAR,FOOD_CHAR)))
         grid, head, food, direction, rows, columns = state
@@ -136,13 +157,22 @@ class Agent:
         return np.asarray(bool_list, dtype=bool)
 
     def get_epsilon(self):
+        """
+        compute the epsilon value
+        """
         epsilon = self.eps_end + (self.eps_start - self.eps_end) * exp(-1. * self.iteration / self.eps_decay)
         return epsilon
 
     def remember(self):
+        """
+        save in a memory states: before the action, the action", the reward of the action, the state after the action and if the sneak died
+        """
         self.memory.append((self.observation.values()))
 
     def train_long_memory(self):
+        """
+        train the model on a sample of the memory
+        """
         if len(self.memory) > BATCH_SIZE:
             mini_sample = random.sample(self.memory, BATCH_SIZE)  # list of tuples
         else:
@@ -151,7 +181,13 @@ class Agent:
         self.trainer.train_step(states, actions, rewards, next_states, dones)
 
     def train_short_memory(self):
+        """
+        train the model on the last action
+        """
         self.trainer.train_step(*self.observation.values())
 
     def save(self, file_name=FILE_NAME):
+        """
+        save the model in a file
+        """
         self.model.save(file_name)
