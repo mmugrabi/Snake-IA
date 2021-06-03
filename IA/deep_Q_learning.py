@@ -11,7 +11,7 @@ MAX_MEMORY = 100_000
 BATCH_SIZE = 2500
 LR = 0.00025
 
-FILE_NAME = "3_layers"
+FILE_NAME = "3_layers_20x20"
 
 class Agent:
     def __init__(self):
@@ -21,8 +21,8 @@ class Agent:
         self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)            # 11, 128, 128, 128, 3
 
         self.iteration = 0
-        self.eps_start = 0.01
-        self.eps_end = 0.01
+        self.eps_start = 1
+        self.eps_end = 0.0
         self.eps_decay = 0.995
 
         self.observation = dict.fromkeys(["state", "action", "reward", "next_state", "done"])
