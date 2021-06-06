@@ -11,7 +11,7 @@ MAX_MEMORY = 100_000
 BATCH_SIZE = 2500
 LR = 0.00025
 
-FILE_NAME = "3_layers_20x20"
+FILE_NAME = "20x20"
 
 class Agent:
     def __init__(self):
@@ -165,7 +165,7 @@ class Agent:
 
     def remember(self):
         """
-        save in a memory states: before the action, the action", the reward of the action, the state after the action and if the sneak died
+        save in the memory the agent states: before the action, the action", the reward of the action, the state after the action and if the sneak died
         """
         self.memory.append((self.observation.values()))
 
